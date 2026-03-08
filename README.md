@@ -1,6 +1,6 @@
 # CUSF Test Stand — Actuation Board
 
-**Cambridge University Spaceflight · Rocket Engine Test Stand Electronics**
+**Cambridge University Spaceflight · Rocket Engine Test Stand**
 
 Hardware design files for the actuation board that drives solenoid valves and servo-actuated ball valves on the CUSF static fire test stand. Designed for safety-critical operation with a hardware interlock chain independent of software.
 
