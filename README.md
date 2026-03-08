@@ -12,7 +12,7 @@ This board is one part of a multi-board test stand instrumentation system:
 
 | Board | Owner | Function |
 |-------|-------|----------|
-| **Actuation Board** (this repo) | — | Solenoid + servo valve control, safety interlock |
+| Actuation Board | — | Solenoid + servo valve control, safety interlock |
 | Data Acquisition Board | Separate team | Pressure, temperature, thrust measurement |
 | Master Laptop | Shared | Control GUI, sequencing, logging |
 
@@ -315,16 +315,6 @@ ISET pin voltage = R_ISET × I_SET_RATIO × I_LOAD
   With 10kΩ: V_ISET = 10kΩ × 100µA/A × I_LOAD = 1.0V/A
 ```
 
-## Dependencies
-
-| Tool | Version | Purpose |
-|------|---------|---------|
-| KiCad | 8.0+ | Schematic & PCB design |
-| PlatformIO | Latest | Firmware build system |
-| ESP-IDF | Via PlatformIO | ESP32 framework |
-| Python 3 | 3.10+ | Laptop control software |
-| pyserial | Latest | Serial communication |
-
 ## Status
 
 - [ ] System architecture defined
@@ -341,14 +331,6 @@ ISET pin voltage = R_ISET × I_SET_RATIO × I_LOAD
 - [ ] Laptop GUI
 - [ ] Board fabrication & assembly
 - [ ] Integration testing
-
-## Blocked Items
-
-| Item | Blocked On | Impact |
-|------|-----------|--------|
-| R_ISET values | Solenoid valve specs (voltage, pull-in current, hold current) | Cannot finalise current regulation |
-| R_HOLD values | Solenoid hold current requirement | Cannot set hold current threshold |
-| 5V regulator selection | Servo stall current (may need upgrade from LM2596 to TPS54560) | Power budget |
 
 ## Contributing
 
