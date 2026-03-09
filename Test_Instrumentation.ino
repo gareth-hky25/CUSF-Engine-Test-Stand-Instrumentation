@@ -5,6 +5,7 @@
 const int pwmPins[] = {PWM1, PWM2, PWM3, PWM4};
 const int pwmChannels[] = {0, 1, 2, 3};
 const int pwmFrequency = 5000;
+// is the signal to drive the solenoids coming from esp32?
 
 void setup() {
     //ties channels to pins
