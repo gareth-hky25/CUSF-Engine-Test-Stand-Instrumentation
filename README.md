@@ -56,7 +56,7 @@ This board is the sensor interface. It conditions and digitises analog signals f
 ## Repository Structure
 
 ```
-cusf-static-fire/
+cusf-engine_test_stand/
 │
 ├── hardware/
 │   ├── master-board/
@@ -67,7 +67,9 @@ cusf-static-fire/
 │   │
 │   ├── instrumentation-board/
 │   │   ├── kicad/
-
+│   │
+│   ├── Datasheets
+│   │   ├── MPQ6610.pdf
 │   │
 │   └── lib/                    # Shared KiCad symbols + footprints
 │       ├── cusf-symbols.kicad_sym
@@ -79,13 +81,9 @@ cusf-static-fire/
 │   ├── solenoid/
 │   ├── instrumentation/
 │
-├── ground-station/             # Laptop software (GUI + logging) #Development hasn't started
+├── Laptop software (GUI + logging) #Development hasn't started
 │
-├── datasheets/
-│   ├── MPQ6610.pdf
-│   └── ...
-│
-├── docs/
+├── Documents/
 │   ├── design.docx   
 │   └── ...
 │
