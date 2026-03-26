@@ -68,12 +68,12 @@ class SerialConnection:
 
     def _read_loop(self):
         #Background thread that reads lines from the serial port and calls the callback
-        while self._running:
+        while self._running:    #Keep looping until disconnect is called, which sets _running to False
             try:
-                if self.ser and self.ser.in_waiting:
-                    raw_line = self.ser.readline().decode("utf-8", errors="replace").strip()
+                if self.ser and self.ser.in_waiting:    #Is there data waiting to be read?
+                    raw_line = self.ser.readline().decode("utf-8", errors="replace").strip()    #Read a line, decode it, and strip whitespace
                     if raw_line and self._on_receive:
-                        msg_object = parse_response(raw_line)
+                        msg_object = parse_response(raw_line)   #Turn the raw string into a structured Message object using our parser. E.g. 'FAULT:1:0' -> FaultMessage(channel=1, ok=False)
                         self._on_receive(msg_object) 
                 else:
                     time.sleep(0.01)
