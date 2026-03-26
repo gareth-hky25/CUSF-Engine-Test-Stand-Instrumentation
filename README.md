@@ -4,8 +4,8 @@
 
 This repo contains documents for CUSF engine test stand. The electronics are split across 2 circuit boards:
 
-| **Servo + Solenoid Board**  Drives 2 solenoid valves (MPQ6610 half-bridge ICs) and up to 4 servo-actuated ball valves with position feedback.|
-| **Instrumentation Board** Reads pressure transducers, thermocouples, and a load cell for thrust measurement.|
+**Servo + Solenoid Board**  Drives 2 solenoid valves (MPQ6610 half-bridge ICs) and up to 4 servo-actuated ball valves with position feedback.
+**Instrumentation Board** Reads pressure transducers, thermocouples, and a load cell for thrust measurement.
 
 A laptop running ground-station software sends commands to the ESP32 on the servo board, and polls the Instrumentation Board (to read sensor data back).
 
@@ -50,16 +50,11 @@ cusf-engine_test_stand/
 │       ├── cusf-symbols.kicad_sym
 │       └── cusf-footprints.pretty/
 │
-├── firmware/
+├── Software/
 │   ├── master/
 │   ├── servo/
 │   ├── solenoid/
 │   ├── instrumentation/
-│
-├── Laptop software (GUI + logging) #Development hasn't started
-│
-├── Documents/
-│   ├── design.docx   
-│   └── ...
+├── Laptop software (GUI + logging)
 │
 └── README.md                  
