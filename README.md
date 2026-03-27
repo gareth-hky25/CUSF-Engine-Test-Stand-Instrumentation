@@ -46,15 +46,11 @@ cusf-engine_test_stand/
 │   ├── Datasheets
 │   │   ├── MPQ6610.pdf
 │   │
-│   └── lib/                    # Shared KiCad symbols + footprints
-│       ├── cusf-symbols.kicad_sym
-│       └── cusf-footprints.pretty/
 │
 ├── Software/
-│   ├── master/
 │   ├── servo/
 │   ├── solenoid/
 │   ├── instrumentation/
-├── Laptop software (GUI + logging)
+│   ├──Laptop software (GUI + logging)
 │
 └── README.md                  

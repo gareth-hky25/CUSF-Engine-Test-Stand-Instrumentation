@@ -52,16 +52,24 @@ class SolenoidCommand(Command):
 
 @dataclass
 class ServoCommand(Command):
+    """Set a servo to one of three positions.
+ 
+    Hardware: ESP32 LEDC PWM output to FT5330M servo.
+        500µs  = fully closed (0°)
+        1500µs = centre (90°)
+        2500µs = fully open (180°)
+    """
     channel: int    # 1 to 4
-    position: int   # 500 to 2500 microseconds
-    
+    pulse_us: int   # 500, 1500, or 2500
+ 
     def __post_init__(self):
         if not (1 <= self.channel <= 4):
-            raise ValueError("Channel must be between 1 and 4")
-        self.position = max(500, min(2500, self.position))  # Makes sure position is within range of 500 to 2500
-
+            raise ValueError(f"Servo channel must be 1–4, got {self.channel}")
+        if self.pulse_us not in (500, 1500, 2500):
+            raise ValueError(f"Pulse must be 500, 1500, or 2500, got {self.pulse_us}")
+ 
     def to_str(self) -> str:
-        return f"SRV{self.channel}:{self.position}\n"
+        return f"SRV{self.channel}:{self.pulse_us}\n"
 
 @dataclass
 class StatusCommand(Command):   # Request for the ESP32 to broadcast its current solenoid and servo states.

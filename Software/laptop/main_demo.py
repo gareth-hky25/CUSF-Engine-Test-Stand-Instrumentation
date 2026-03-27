@@ -1,14 +1,17 @@
 """
 main.py — CUSF Static Fire Test Stand Ground Station GUI.
 
-This is the laptop application that controls the test stand.
-It connects to the ESP32-S3 on the actuation board over USB serial
-and provides:
-    - Solenoid valve controls (on/off buttons)
-    - Servo position controls (sliders, 500–2500µs)
-    - nFAULT status indicators (green/red per solenoid channel)
-    - Live sensor readings (pressure, temperature, thrust)
-    - Timestamped logging to screen and CSV file
+Controls:
+    - 2 solenoid valves (on/off toggle buttons)
+    - 4 servos (3 preset buttons each: closed / centre / open)
+    - 3 global servo presets (all closed / all centre / all open)
+
+Displays:
+    - nFAULT status per solenoid (green/red)
+    - 8 pressure readings (bar)
+    - 4 temperature readings (°C)
+    - 1 force/thrust reading (N)
+    - Timestamped log (screen + CSV file)
 
 Run with:  python main.py
 """
@@ -22,28 +25,23 @@ from protocol import (
     Message, FaultMessage, SensorMessage, AcknowledgementMessage, ErrorMessage
 )
 
-
-# ─── App appearance ──────────────────────────────────────────
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 
 class TestStandGUI(ctk.CTk):
-    """Main application window for the test stand ground station."""
 
     def __init__(self):
         super().__init__()
 
         self.title("CUSF Static Fire — Ground Station")
-        self.geometry("1050x750")
+        self.geometry("1100x800")
 
-        # Serial connection (None until user clicks Connect)
         self.serial = None
-
-        # Track solenoid on/off states
         self.sol_states = {1: False, 2: False}
+        self.servo_states = {1: 500, 2: 500, 3: 500, 4: 500}
 
-        # ─── File logging setup ──────────────────────────────
+        # File logging
         os.makedirs("logs", exist_ok=True)
         log_filename = datetime.datetime.now().strftime(
             "logs/log_%Y%m%d_%H%M%S.csv"
@@ -51,7 +49,7 @@ class TestStandGUI(ctk.CTk):
         self.log_file = open(log_filename, "w")
         self.log_file.write("timestamp,type,data\n")
 
-        # ─── Build the GUI ───────────────────────────────────
+        # Build GUI
         self._build_connection_bar()
         self._build_main_layout()
         self._build_solenoid_controls()
@@ -64,65 +62,47 @@ class TestStandGUI(ctk.CTk):
     # ═══════════════════════════════════════════════════════════
 
     def _build_connection_bar(self):
-        """Top bar: port selection, connect/disconnect, status indicator."""
-        self.top_frame = ctk.CTkFrame(self)
-        self.top_frame.pack(fill="x", padx=10, pady=(10, 5))
+        """Top bar: port selection, connect/disconnect, status."""
+        frame = ctk.CTkFrame(self)
+        frame.pack(fill="x", padx=10, pady=(10, 5))
 
-        # Port dropdown
-        ctk.CTkLabel(self.top_frame, text="Port:").pack(side="left", padx=5)
+        ctk.CTkLabel(frame, text="Port:").pack(side="left", padx=5)
 
         self.port_var = ctk.StringVar()
         self.port_menu = ctk.CTkOptionMenu(
-            self.top_frame, variable=self.port_var, values=[""]
+            frame, variable=self.port_var, values=[""]
         )
         self.port_menu.pack(side="left", padx=5)
 
-        # Refresh button — rescans for serial ports
-        self.refresh_btn = ctk.CTkButton(
-            self.top_frame, text="Refresh", width=80,
-            command=self.refresh_ports
-        )
-        self.refresh_btn.pack(side="left", padx=5)
+        ctk.CTkButton(
+            frame, text="Refresh", width=80, command=self.refresh_ports
+        ).pack(side="left", padx=5)
 
-        # Connect/Disconnect button
         self.connect_btn = ctk.CTkButton(
-            self.top_frame, text="Connect", width=100,
-            command=self.toggle_connection
+            frame, text="Connect", width=100, command=self.toggle_connection
         )
         self.connect_btn.pack(side="left", padx=5)
 
-        # Connection status indicator
         self.status_label = ctk.CTkLabel(
-            self.top_frame, text="● Disconnected", text_color="red"
+            frame, text="● Disconnected", text_color="red"
         )
         self.status_label.pack(side="left", padx=15)
 
-        # Populate the port dropdown on startup
         self.refresh_ports()
 
     def _build_main_layout(self):
-        """Create the two-column layout: controls on left, data on right."""
+        """Two-column layout: controls on left, sensors + log on right."""
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # Left column: valve controls
         self.left_col = ctk.CTkFrame(self.main_frame)
         self.left_col.pack(side="left", fill="both", expand=True, padx=(0, 5))
 
-        # Right column: sensors + log
         self.right_col = ctk.CTkFrame(self.main_frame)
         self.right_col.pack(side="right", fill="both", expand=True, padx=(5, 0))
 
     def _build_solenoid_controls(self):
-        """Solenoid on/off buttons with nFAULT indicators.
-
-        Each solenoid channel gets:
-        - A toggle button (grey=off, green=on)
-        - An nFAULT status dot (green=ok, red=fault)
-
-        The nFAULT status is updated by incoming FaultMessage data
-        from the ESP32, which reads the MPQ6610's nFAULT pin.
-        """
+        """2 solenoid toggle buttons with nFAULT indicators."""
         frame = ctk.CTkFrame(self.left_col)
         frame.pack(fill="x", padx=10, pady=5)
 
@@ -137,7 +117,6 @@ class TestStandGUI(ctk.CTk):
             row = ctk.CTkFrame(frame, fg_color="transparent")
             row.pack(fill="x", padx=10, pady=3)
 
-            # Toggle button
             btn = ctk.CTkButton(
                 row, text=f"SOL {ch}: OFF", width=150,
                 fg_color="gray30", hover_color="gray40",
@@ -146,7 +125,6 @@ class TestStandGUI(ctk.CTk):
             btn.pack(side="left")
             self.sol_buttons[ch] = btn
 
-            # nFAULT indicator
             fault = ctk.CTkLabel(
                 row, text="● nFAULT OK", text_color="green"
             )
@@ -154,16 +132,10 @@ class TestStandGUI(ctk.CTk):
             self.fault_labels[ch] = fault
 
     def _build_servo_controls(self):
-        """Servo position sliders (500–2500µs).
+        """4 servos × 3 preset buttons + 3 global presets.
 
-        Each slider controls one FT5330M servo. The pulse width maps
-        to the servo's angular position:
-            500µs  = 0° (fully closed)
-            1500µs = 90° (centre)
-            2500µs = 180° (fully open)
-
-        Moving the slider sends a ServoCommand to the ESP32, which
-        updates the LEDC PWM output on the corresponding GPIO pin.
+        Each servo gets: [Closed (500)] [Centre (1500)] [Open (2500)]
+        The active position is highlighted in colour.
         """
         frame = ctk.CTkFrame(self.left_col)
         frame.pack(fill="x", padx=10, pady=5)
@@ -172,54 +144,64 @@ class TestStandGUI(ctk.CTk):
             anchor="w", padx=10, pady=(10, 5)
         )
 
-        # Preset buttons
+        # Global presets
         preset_row = ctk.CTkFrame(frame, fg_color="transparent")
-        preset_row.pack(fill="x", padx=10, pady=(0, 5))
+        preset_row.pack(fill="x", padx=10, pady=(0, 8))
 
         ctk.CTkButton(
-            preset_row, text="All Closed (500)", width=120,
+            preset_row, text="All Closed", width=110,
+            fg_color="#8B0000", hover_color="#A52A2A",
             command=lambda: self.set_all_servos(500)
         ).pack(side="left", padx=3)
 
         ctk.CTkButton(
-            preset_row, text="All Centre (1500)", width=120,
+            preset_row, text="All Centre", width=110,
+            fg_color="#B8860B", hover_color="#DAA520",
             command=lambda: self.set_all_servos(1500)
         ).pack(side="left", padx=3)
 
         ctk.CTkButton(
-            preset_row, text="All Open (2500)", width=120,
+            preset_row, text="All Open", width=110,
+            fg_color="#006400", hover_color="#228B22",
             command=lambda: self.set_all_servos(2500)
         ).pack(side="left", padx=3)
 
-        # Individual sliders
-        self.servo_sliders = {}
-        self.servo_labels = {}
+        # Per-servo buttons
+        self.servo_buttons = {}  # {(channel, pulse): button_widget}
+
+        presets = [
+            (500, "Closed", "#8B0000", "#A52A2A"),
+            (1500, "Centre", "#B8860B", "#DAA520"),
+            (2500, "Open", "#006400", "#228B22"),
+        ]
 
         for ch in [1, 2, 3, 4]:
             row = ctk.CTkFrame(frame, fg_color="transparent")
-            row.pack(fill="x", padx=10, pady=3)
+            row.pack(fill="x", padx=10, pady=2)
 
             ctk.CTkLabel(row, text=f"Servo {ch}:", width=70).pack(side="left")
 
-            label = ctk.CTkLabel(row, text="1500 µs", width=70)
-            label.pack(side="right")
-            self.servo_labels[ch] = label
+            for pulse, label, color, hover in presets:
+                btn = ctk.CTkButton(
+                    row, text=label, width=90,
+                    fg_color="gray30", hover_color="gray40",
+                    command=lambda c=ch, p=pulse: self.set_servo(c, p)
+                )
+                btn.pack(side="left", padx=3)
+                self.servo_buttons[(ch, pulse)] = btn
 
-            slider = ctk.CTkSlider(
-                row, from_=500, to=2500, number_of_steps=200,
-                command=lambda val, c=ch: self.on_servo_change(c, val)
-            )
-            slider.set(1500)
-            slider.pack(side="left", fill="x", expand=True, padx=10)
-            self.servo_sliders[ch] = slider
+            # Status label showing current position
+            status = ctk.CTkLabel(row, text="500 µs", width=60, text_color="gray")
+            status.pack(side="left", padx=8)
+            # Store with a special key
+            self.servo_buttons[(ch, "label")] = status
+
+        # Highlight the initial state (all closed)
+        for ch in [1, 2, 3, 4]:
+            self._update_servo_buttons(ch, 500)
 
     def _build_sensor_display(self):
-        """Live sensor readings from the instrumentation board.
-
-        These values come from the ESP32, which polls the instrumentation
-        board over the inter-board bus. The ESP32 sends SENSOR: lines
-        periodically, and the GUI updates the display.
-        """
+        """8 pressure + 4 temperature + 1 force sensor displays."""
         frame = ctk.CTkFrame(self.right_col)
         frame.pack(fill="x", padx=10, pady=5)
 
@@ -229,34 +211,58 @@ class TestStandGUI(ctk.CTk):
 
         self.sensor_labels = {}
 
-        sensors = [
-            ("PRESS1", "Pressure 1", "bar"),
-            ("PRESS2", "Pressure 2", "bar"),
-            ("TEMP1", "Temperature 1", "°C"),
-            ("THRUST", "Thrust", "N"),
-        ]
+        # Use a scrollable frame since we have 13 sensors
+        sensor_scroll = ctk.CTkScrollableFrame(frame, height=300)
+        sensor_scroll.pack(fill="x", padx=10, pady=(0, 10))
 
-        for key, name, unit in sensors:
-            row = ctk.CTkFrame(frame, fg_color="transparent")
-            row.pack(fill="x", padx=10, pady=2)
+        # Pressure sensors (8)
+        ctk.CTkLabel(
+            sensor_scroll, text="Pressure", font=("", 13, "bold"),
+            text_color="gray"
+        ).pack(anchor="w", pady=(5, 2))
 
-            ctk.CTkLabel(row, text=f"{name}:", width=130).pack(side="left")
+        for i in range(1, 9):
+            key = f"PRESS{i}"
+            row = ctk.CTkFrame(sensor_scroll, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            ctk.CTkLabel(row, text=f"  P{i}:", width=50).pack(side="left")
+            val = ctk.CTkLabel(row, text="---", font=("", 13, "bold"), width=70)
+            val.pack(side="left")
+            ctk.CTkLabel(row, text="bar", text_color="gray").pack(side="left")
+            self.sensor_labels[key] = val
 
-            val_label = ctk.CTkLabel(
-                row, text="---", font=("", 14, "bold"), width=80
-            )
-            val_label.pack(side="left")
-            self.sensor_labels[key] = val_label
+        # Temperature sensors (4)
+        ctk.CTkLabel(
+            sensor_scroll, text="Temperature", font=("", 13, "bold"),
+            text_color="gray"
+        ).pack(anchor="w", pady=(10, 2))
 
-            ctk.CTkLabel(row, text=unit, text_color="gray").pack(side="left")
+        for i in range(1, 5):
+            key = f"TEMP{i}"
+            row = ctk.CTkFrame(sensor_scroll, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            ctk.CTkLabel(row, text=f"  T{i}:", width=50).pack(side="left")
+            val = ctk.CTkLabel(row, text="---", font=("", 13, "bold"), width=70)
+            val.pack(side="left")
+            ctk.CTkLabel(row, text="°C", text_color="gray").pack(side="left")
+            self.sensor_labels[key] = val
+
+        # Force sensor (1)
+        ctk.CTkLabel(
+            sensor_scroll, text="Force", font=("", 13, "bold"),
+            text_color="gray"
+        ).pack(anchor="w", pady=(10, 2))
+
+        row = ctk.CTkFrame(sensor_scroll, fg_color="transparent")
+        row.pack(fill="x", pady=1)
+        ctk.CTkLabel(row, text="  F:", width=50).pack(side="left")
+        val = ctk.CTkLabel(row, text="---", font=("", 13, "bold"), width=70)
+        val.pack(side="left")
+        ctk.CTkLabel(row, text="N", text_color="gray").pack(side="left")
+        self.sensor_labels["FORCE"] = val
 
     def _build_log_panel(self):
-        """Scrolling log panel + CSV file logging.
-
-        Every sensor reading, fault, error, and command is logged with
-        a timestamp. The log panel shows the last N messages on screen,
-        and everything is also written to a CSV file in the logs/ folder.
-        """
+        """Scrolling log with timestamps."""
         frame = ctk.CTkFrame(self.right_col)
         frame.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -264,15 +270,14 @@ class TestStandGUI(ctk.CTk):
             anchor="w", padx=10, pady=(10, 5)
         )
 
-        self.log_box = ctk.CTkTextbox(frame, height=250, state="disabled")
+        self.log_box = ctk.CTkTextbox(frame, height=200, state="disabled")
         self.log_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
     # ═══════════════════════════════════════════════════════════
-    # CONNECTION HANDLING
+    # CONNECTION
     # ═══════════════════════════════════════════════════════════
 
     def refresh_ports(self):
-        """Scan for available serial ports and update the dropdown."""
         ports = find_ports()
         if ports:
             self.port_menu.configure(values=ports)
@@ -282,9 +287,7 @@ class TestStandGUI(ctk.CTk):
             self.port_var.set("No ports found")
 
     def toggle_connection(self):
-        """Connect or disconnect from the ESP32."""
         if self.serial and self.serial.is_connected:
-            # Currently connected → disconnect
             self.serial.disconnect()
             self.serial = None
             self.connect_btn.configure(text="Connect")
@@ -293,12 +296,8 @@ class TestStandGUI(ctk.CTk):
             )
             self.log("Disconnected from ESP32")
         else:
-            # Currently disconnected → connect
             port = self.port_var.get()
             self.serial = SerialConnection(port)
-
-            # Register our callback — the serial module will call
-            # self.on_serial_receive() whenever the ESP32 sends data
             self.serial.set_callback(self.on_serial_receive)
 
             if self.serial.connect():
@@ -315,27 +314,15 @@ class TestStandGUI(ctk.CTk):
                 self.log(f"Failed to connect to {port}")
 
     # ═══════════════════════════════════════════════════════════
-    # SERIAL DATA HANDLING (the callback chain)
+    # SERIAL DATA HANDLING
     # ═══════════════════════════════════════════════════════════
 
     def on_serial_receive(self, msg: Message):
-        """Called by the serial reader thread when data arrives.
-
-        THIS RUNS ON THE BACKGROUND THREAD — you must NOT update
-        GUI widgets here. Instead, use self.after() to schedule
-        the update on the main GUI thread.
-
-        self.after(0, function, args) means:
-            "As soon as possible, run this function on the main thread"
-        """
+        """Called from background thread. Schedules GUI update on main thread."""
         self.after(0, self._handle_message, msg)
 
     def _handle_message(self, msg: Message):
-        """Process a received Message and update the GUI.
-
-        THIS RUNS ON THE MAIN THREAD (scheduled by self.after),
-        so it's safe to update widgets here.
-        """
+        """Process a received message. Runs on main thread."""
         if isinstance(msg, FaultMessage):
             ch = msg.channel
             if ch in self.fault_labels:
@@ -354,24 +341,23 @@ class TestStandGUI(ctk.CTk):
                 self.sensor_labels[msg.name].configure(
                     text=f"{msg.value:.1f}"
                 )
-            self.log(f"SENSOR {msg.name}: {msg.value}")
+            self.log(f"{msg.name}: {msg.value}")
 
         elif isinstance(msg, ErrorMessage):
-            self.log(f"ERROR from ESP32: {msg.message}")
+            self.log(f"ERROR: {msg.message}")
 
-        elif isinstance(msg, AckMessage):
-            pass  # Command acknowledged — nothing to show
+        elif isinstance(msg, AcknowledgementMessage):
+            pass
 
     # ═══════════════════════════════════════════════════════════
     # VALVE CONTROLS
     # ═══════════════════════════════════════════════════════════
 
     def toggle_solenoid(self, channel: int):
-        """Toggle a solenoid on/off and send the command to the ESP32."""
+        """Toggle solenoid on/off."""
         self.sol_states[channel] = not self.sol_states[channel]
         on = self.sol_states[channel]
 
-        # Update button appearance
         if on:
             self.sol_buttons[channel].configure(
                 text=f"SOL {channel}: ON",
@@ -383,84 +369,97 @@ class TestStandGUI(ctk.CTk):
                 fg_color="gray30", hover_color="gray40"
             )
 
-        # Send command to ESP32
         if self.serial and self.serial.is_connected:
             self.serial.send(SolenoidCommand(channel, on))
 
         self.log(f"SOL {channel} → {'ON' if on else 'OFF'}")
 
-    def on_servo_change(self, channel: int, value: float):
-        """Called when a servo slider is moved."""
-        pulse = int(value)
-        self.servo_labels[channel].configure(text=f"{pulse} µs")
+    def set_servo(self, channel: int, pulse_us: int):
+        """Set one servo to a preset position."""
+        self.servo_states[channel] = pulse_us
+        self._update_servo_buttons(channel, pulse_us)
 
-        # Send command to ESP32
         if self.serial and self.serial.is_connected:
-            self.serial.send(ServoCommand(channel, pulse))
+            self.serial.send(ServoCommand(channel, pulse_us))
+
+        label = {500: "Closed", 1500: "Centre", 2500: "Open"}[pulse_us]
+        self.log(f"Servo {channel} → {label} ({pulse_us} µs)")
 
     def set_all_servos(self, pulse_us: int):
-        """Set all 4 servos to the same position (preset button)."""
+        """Set all 4 servos to the same position."""
         for ch in [1, 2, 3, 4]:
-            self.servo_sliders[ch].set(pulse_us)
-            self.on_servo_change(ch, pulse_us)
-        self.log(f"All servos → {pulse_us} µs")
+            self.set_servo(ch, pulse_us)
+
+    def _update_servo_buttons(self, channel: int, active_pulse: int):
+        """Highlight the active button for a servo channel, grey out the rest."""
+        colours = {
+            500: ("#8B0000", "#A52A2A"),      # Dark red
+            1500: ("#B8860B", "#DAA520"),      # Dark gold
+            2500: ("#006400", "#228B22"),      # Dark green
+        }
+
+        for pulse in [500, 1500, 2500]:
+            btn = self.servo_buttons[(channel, pulse)]
+            if pulse == active_pulse:
+                fg, hover = colours[pulse]
+                btn.configure(fg_color=fg, hover_color=hover)
+            else:
+                btn.configure(fg_color="gray30", hover_color="gray40")
+
+        # Update the status label
+        self.servo_buttons[(channel, "label")].configure(
+            text=f"{active_pulse} µs"
+        )
 
     # ═══════════════════════════════════════════════════════════
     # LOGGING
     # ═══════════════════════════════════════════════════════════
 
     def log(self, message: str):
-        """Log a message to both the GUI panel and the CSV file."""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
-        # Append to the GUI log panel
         self.log_box.configure(state="normal")
         self.log_box.insert("end", f"[{timestamp}] {message}\n")
-        self.log_box.see("end")     # Auto-scroll to the bottom
+        self.log_box.see("end")
         self.log_box.configure(state="disabled")
 
-        # Append to the CSV file
         full_timestamp = datetime.datetime.now().isoformat()
         self.log_file.write(f"{full_timestamp},{message}\n")
-        self.log_file.flush()       # Write immediately, don't buffer
+        self.log_file.flush()
 
 
 # ═══════════════════════════════════════════════════════════════
-# MOCK DATA (for testing without the ESP32)
+# MOCK DATA (testing without ESP32)
 # ═══════════════════════════════════════════════════════════════
 
 def add_mock_data(app: TestStandGUI):
-    """Inject fake sensor/fault data into the GUI for testing.
-
-    Call this from __main__ to test the GUI without an ESP32 connected.
-    It simulates the ESP32 sending periodic sensor readings and
-    occasional fault events.
-    """
+    """Inject fake data for GUI testing. No ESP32 needed."""
     import random
 
     def send_fake():
-        # Simulate sensor readings with some noise
+        # 8 pressure sensors
+        for i in range(1, 9):
+            app._handle_message(SensorMessage(
+                f"PRESS{i}", round(2.5 + random.gauss(0, 0.15), 2)
+            ))
+
+        # 4 temperature sensors
+        for i in range(1, 5):
+            app._handle_message(SensorMessage(
+                f"TEMP{i}", round(22.0 + i * 5 + random.gauss(0, 0.5), 1)
+            ))
+
+        # 1 force sensor
         app._handle_message(SensorMessage(
-            "PRESS1", round(3.0 + random.gauss(0, 0.1), 2)
-        ))
-        app._handle_message(SensorMessage(
-            "PRESS2", round(2.1 + random.gauss(0, 0.05), 2)
-        ))
-        app._handle_message(SensorMessage(
-            "TEMP1", round(25.0 + random.gauss(0, 0.5), 1)
-        ))
-        app._handle_message(SensorMessage(
-            "THRUST", round(max(0, 140 + random.gauss(0, 5)), 1)
+            "FORCE", round(max(0, 140 + random.gauss(0, 5)), 1)
         ))
 
-        # nFAULT: usually OK, 5% chance of fault on channel 1
+        # nFAULT: usually OK, occasional fault on channel 1
         app._handle_message(FaultMessage(1, random.random() > 0.05))
         app._handle_message(FaultMessage(2, True))
 
-        # Repeat every 200ms
         app.after(200, send_fake)
 
-    # Start after 1 second (give the GUI time to finish building)
     app.after(1000, send_fake)
 
 
@@ -471,9 +470,7 @@ def add_mock_data(app: TestStandGUI):
 if __name__ == "__main__":
     app = TestStandGUI()
 
-    # ──────────────────────────────────────────────────────────
-    # Uncomment the next line to test with fake data (no ESP32):
+    # Uncomment to test with fake data (no ESP32 needed):
     # add_mock_data(app)
-    # ──────────────────────────────────────────────────────────
 
     app.mainloop()
